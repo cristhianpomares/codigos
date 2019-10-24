@@ -1,0 +1,181 @@
+#include <Servo.h>
+#define PINMOTOR 9 //pin conectado al ESC, en este caso CH_5 en ARDUPILOT corresponde al pin 8
+#define MAXIMOPWM 120 // Son grados Podía llegar hasta 120, para más seguridad se deja bajo
+#define MINIMOPWM 67 // por si acaso empezar con un valor inferior, mi motor no arranca hasta 67
+#define PASO 1 // Incrementos del teclado
+Servo miServo;
+const int pinSen = 0;
+const int pinServo = 2;
+const int pulsoMin = 650; //pulso en us para girar el servo a 0°
+const int pulsoMax = 2550; //pulso en us para girar el servo a 180°
+byte tec;
+int valor;
+int angulo;
+int pulsoMotor;
+int ordenTeclado = 0;
+byte LED;
+Servo myservo; // creamos el motor como elemento en la libreria
+char recibiendoByte ;
+boolean iniciado = false;
+void setup() {
+  Serial.begin(9600);
+
+
+
+  pinMode(LED, OUTPUT);
+  Serial.println("pH meter experiment!"); //Test the serial monitor
+  //////////brushless//////////
+
+  myservo.attach(PINMOTOR); // inicializo el ESC en el pin determinado
+  Serial.println(" Comienzo del test"); //
+  Serial.println (" Pulsar 'A' para arrancar \n Cuando escuche el pitido de confirmación");
+  while ( iniciado == false ) {
+    myservo.write(0); // Armado
+    tec = Serial.read(); // Leemos el Byte recibido
+    if (tec == 65 || tec == 97) { // A o a Mayusculas o minusculas
+      iniciado = true;
+    }
+  }
+  Serial.println("inicio del loop principal \n Para controlar pulse \n 'W' para subir \n 'S' para bajar \n 'P' para terminar Stop \n 'A' para girar a la izquierda \n 'D' para girar a la derecha\n");
+  //////////servo//////////////
+  miServo.attach(pinServo, pulsoMin, pulsoMax);
+
+
+}
+void loop() {
+  tec = Serial.read();
+
+  /////////////////brushless/////////////
+  ordenTeclado = OrdenSubirBajar ();
+  if (ordenTeclado != 0) { // Distinto de Cero
+    pulsoMotor = pulsoMotor + ordenTeclado;
+    pulsoMotor = constrain( pulsoMotor , MINIMOPWM, MAXIMOPWM); //
+    myservo.write(pulsoMotor); //Mientras no hay cambios,automaticamente se siguen enviando los mismos pulsos
+    Serial.print("Velocidad del pulso--> ");
+    Serial.println (pulsoMotor);
+  }
+  delay (150); //delay para no colapsar
+}
+int OrdenSubirBajar () {
+  int orden = 0;
+  // Serial.flush();// Limpiamos el Bufer de entrada (evitar efecto ametralladora)
+  //delay (150);
+  if (Serial.available() > 0) {
+    tec = Serial.read(); // Leemos el Byte recibido
+
+    if (tec == 87 || tec == 119) { // W o w Mayusculas o minusculas
+      Serial.println( " SUBIR");
+      orden = PASO;
+
+    }
+    if (tec == 83 || tec == 115) { // S o s Mayusculas o minisculas
+      Serial.println( " BAJAR");
+      orden = -PASO;
+    }
+    if (tec == 80 || tec == 112) { // P o p Mayusculas o minisculas
+      Serial.println( " Stop!!");
+      orden = -(pulsoMotor - MINIMOPWM); // Deja el pulso en MINIMOPWM
+    }
+    ///////////////////servo///////////////
+    if (tec == 65 || tec == 97) {
+      Serial.println(tec);
+      valor = 2550;
+      miServo.write(valor);
+      delay(300);
+      valor = 1440;
+      miServo.write(valor);
+    }
+
+    if (tec == 68 || tec == 100) {
+      Serial.println(tec);
+      valor = 650;
+      miServo.write(valor);
+      delay(300);
+      valor = 1440;
+      miServo.write(valor);
+    }
+    //////////////fin servo////////////
+  }
+  return (orden);
+  ////////////////finbrushless////////////
+
+
+  //////////////Codigo para utilizar el pH metro con arduino.//////////
+  /*
+    # This sample code is used to test the pH meter V1.0.
+    # Editor : YouYou
+    # Ver : 1.0
+    # Product: analog pH meter
+    # SKU : SEN0161
+  */
+
+#define SensorPin A0 //pH meter Analog output to Arduino Analog Input 0
+#define Offset 0.00 //deviation compensate
+#define LED 13
+#define samplingInterval 20
+#define printInterval 800
+#define ArrayLenth 40 //times of collection
+  int pHArray[ArrayLenth]; //Store the average value of the sensor feedback
+  int pHArrayIndex = 0;
+
+  static unsigned long samplingTime = millis();
+  static unsigned long printTime = millis();
+  static float pHValue, voltage;
+  if (millis() - samplingTime > samplingInterval)
+  {
+    pHArray[pHArrayIndex++] = analogRead(SensorPin);
+    if (pHArrayIndex == ArrayLenth)pHArrayIndex = 0;
+    voltage = avergearray(pHArray, ArrayLenth) * 5.0 / 1024;
+    pHValue = 3.5 * voltage + Offset;
+    samplingTime = millis();
+  }
+  if (millis() - printTime > printInterval) //Every 800 milliseconds, print a numerical,convert the state of the LED indicator
+  {
+    Serial.print("Voltage:");
+    Serial.print(voltage, 2);
+    Serial.print(" pH value: ");
+    Serial.println(pHValue, 2);
+    digitalWrite(LED, digitalRead(LED) ^ 1);
+    printTime = millis();
+  }
+}
+double avergearray(int* arr, int number) {
+  int i;
+  int max, min;
+  double avg;
+  long amount = 0;
+  if (number <= 0) {
+    Serial.println("Error number for the array to avraging!/n");
+    return 0;
+  }
+
+  if (number < 5) { //less than 5, calculated directly statistics
+    for (i = 0; i < number; i++) {
+      amount += arr[i];
+    }
+    avg = amount / number;
+    return avg;
+  } else {
+    if (arr[0] < arr[1]) {
+      min = arr[0]; max = arr[1];
+    }
+    else {
+      min = arr[1]; max = arr[0];
+    }
+    for (i = 2; i < number; i++) {
+      if (arr[i] < min) {
+        amount += min; //arr<min
+        min = arr[i];
+      } else {
+        if (arr[i] > max) {
+          amount += max; //arr>max
+          max = arr[i];
+        } else {
+          amount += arr[i]; //min<=arr<=max
+        }
+      }//if
+    }//for
+    avg = (double)amount / (number - 2);
+  }//if
+  return avg;
+}
